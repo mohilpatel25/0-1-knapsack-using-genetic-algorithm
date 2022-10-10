@@ -113,6 +113,7 @@ if __name__ == '__main__':
                               size=item_count)  # weight of each item
   profits = np.random.randint(1, 50, size=item_count)  # profit for each item
 
+  print(f'Knapsack Size: {knapsack_size}')
   print('Weight\tProfit')
   for weight, profit in zip(weights, profits):
     print(f'{weight}\t{profit}')
