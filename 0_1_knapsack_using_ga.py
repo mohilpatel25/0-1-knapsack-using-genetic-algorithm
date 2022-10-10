@@ -1,75 +1,131 @@
-import pandas as pd
+"""Implementation of 0/1 knapsack problem using Genetic Algorithm."""
+
 import numpy as np
-import matplotlib.pyplot as plt
-
-item_count = 10  # number of items
-limit = 40  # size of knapsack
-
-weight = np.random.randint(1, 30, size=item_count)  # weight of items
-profit = np.random.randint(10, 100, size=item_count)  # profit for each
-print('Weight\tProfit')
-for i in range(item_count):
-    print('%s\t%s' % (weight[i], profit[i]))
-
-population_size = 12  # number of chromosomes in population
-population = np.random.randint(2, size=(population_size, item_count))
-population = pd.DataFrame(population, columns=(weight))
-population['Fitness'] = np.zeros(population_size).astype('int')
-print(population)
 
 
-def calFitness(population, p, w, l):
-    for c in range(len(population)):
-        chrom = np.array(population.loc[c])[:-1]
-        fit = np.dot(chrom, p)
-        we = np.dot(chrom, w)
-        if (we <= l):
-            population.loc[c]['Fitness'] = fit
-        else:
-            population.loc[c]['Fitness'] = 0
+class Chromosome:
+  """Class to manage individual chromosomes in genetic algorithm.
+  """
+
+  def __init__(self, weights, profits, knapsack_size) -> None:
+    self.weights = weights
+    self.profits = profits
+    self.knapsack_size = knapsack_size
+    self.genes = np.random.randint(0, 2, len(weights))
+    self.size = len(self.genes)
+
+  @property
+  def fitness(self):
+    total_weight = np.dot(self.genes, self.weights)
+    fitness = np.dot(self.genes, self.profits)
+    if total_weight <= self.knapsack_size:
+      return fitness
+    return 0
+
+  def __lt__(self, o: object) -> bool:
+    return self.fitness > o.fitness
+
+  def __eq__(self, o: object) -> bool:
+    return self.fitness == o.fitness
+
+  def __gt__(self, o: object) -> bool:
+    return self.fitness < o.fitness
+
+  def single_point_crossover(self, chromosome):
+    crossover_point = np.random.randint(1, self.size - 1)
+    offspring1 = Chromosome(self.weights, self.profits, self.knapsack_size)
+    offspring1.genes = np.concatenate(
+        (self.genes[:crossover_point], chromosome.genes[crossover_point:]))
+    offspring2 = Chromosome(self.weights, self.profits, self.knapsack_size)
+    offspring2.genes = np.concatenate(
+        (chromosome.genes[:crossover_point], self.genes[crossover_point:]))
+    return offspring1, offspring2
+
+  def mutate(self, mutation_probability):
+    self.genes = np.where(
+        np.random.random(self.size) < mutation_probability, self.genes ^ 1,
+        self.genes)
 
 
-generation = 1  # number of generation
-meanfitness = []
-maxfitness = []
-for g in range(generation):
-    calFitness(population, profit, weight, limit)
-    population = population.sort_values(by='Fitness')
-    population.reset_index(drop=True, inplace=True)
+class GeneticAlgorithm:
+  """Class to manage genetic algorithm for 0/1 Knapsack problem.
+  """
 
-    parent = population[-4:].reset_index(drop=True)  # select 4 fittest parents
-    offspring = parent.copy()
+  def __init__(self,
+               weights,
+               profits,
+               knapsack_size,
+               population_size,
+               selection_ratio=0.4,
+               mutation_prob=0.5) -> None:
+    self.weights = weights
+    self.profits = profits
+    self.knapsack_size = knapsack_size
+    self.population_size = population_size
+    self.selection_ratio = selection_ratio
+    self.mutation_prob = mutation_prob
+    self.chromosomes = sorted([
+        Chromosome(self.weights, self.profits, self.knapsack_size)
+        for i in range(population_size)
+    ])
 
-    # one point crossover
-    for ind in range(int(len(parent) / 2)):
-        split = np.random.randint(0, item_count)
-        for i in range(split, item_count):
-            temp = offspring.loc[ind].iloc[i]
-            offspring.loc[ind].iloc[i] = offspring.loc[len(offspring) - 1 -
-                                                       ind].iloc[i]
-            offspring.loc[len(offspring) - 1 - ind].iloc[i] = temp
+  def crossover(self, parents):
+    return parents[0].single_point_crossover(parents[1])
 
-    # bit flip mutation
-    mutation_probability = 0.5
-    for ind in range(len(offspring)):
-        for i in range(item_count):
-            if (np.random.randn() > mutation_probability):
-                offspring.loc[ind].iloc[i] = offspring.loc[ind].iloc[i] ^ 1
+  def mutatation(self, offsprings, mutation_prob):
+    for offspring in offsprings:
+      offspring.mutate(mutation_prob)
+    return offsprings
 
-    population = population[len(offspring):].append(offspring)
-    mean = np.mean(population['Fitness'])
-    meanfitness.append(mean)
-    mx = max(population['Fitness'])
-    maxfitness.append(mx)
+  def next_generation(self):
+    n_selection = int(self.population_size * self.selection_ratio)
+    n_selection = (n_selection // 2) * 2
+    fittest_individuals = self.chromosomes[:n_selection]
 
-    if ((mx == mean) and generation > 50):
-        break
-    generation += 1
+    offsprings = []
+    for i in range(0, n_selection, 2):
+      offsprings += self.crossover(fittest_individuals[i:i + 2])
 
-print(population)
-plt.plot(meanfitness, label='Mean Fitness')
-plt.plot(maxfitness, 'r', label='Max Fitness')
-plt.xlabel('Generations')
-plt.ylabel('Fitness')
-plt.legend()
-plt.grid()
+    offsprings = self.mutatation(offsprings, self.mutation_prob)
+
+    self.chromosomes += offsprings
+    self.chromosomes = sorted(self.chromosomes)[:self.population_size]
+
+  def fittest_chromosome(self):
+    return self.chromosomes[0]
+
+  def evolve(self, generations, log_freq=1000):
+    for generation in range(1, generations):
+      ga.next_generation()
+      if generation % log_freq == 0:
+        max_profit = self.fittest_chromosome().fitness
+        print(f'Generation {generation}: Max Profit = {max_profit}')
+      generations += 1
+    return self.fittest_chromosome()
+
+
+if __name__ == '__main__':
+  item_count = 5  # number of items
+  knapsack_size = 15  # size of knapsack
+  population_size = 10
+
+  weights = np.random.randint(1, knapsack_size,
+                              size=item_count)  # weight of each item
+  profits = np.random.randint(1, 50, size=item_count)  # profit for each item
+
+  print('Weight\tProfit')
+  for weight, profit in zip(weights, profits):
+    print(f'{weight}\t{profit}')
+
+  ga = GeneticAlgorithm(weights=weights,
+                        profits=profits,
+                        knapsack_size=knapsack_size,
+                        population_size=population_size)
+
+  solution = ga.evolve(100)
+
+  print('\nSolution Found')
+  print('Weight\tProfit\tSelect')
+  for weight, profit, gene in zip(weights, profits, solution.genes):
+    print(f'{weight}\t{profit}\t{gene}')
+  print(f'Max Profit: {solution.fitness}')
